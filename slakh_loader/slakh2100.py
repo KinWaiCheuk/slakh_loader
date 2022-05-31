@@ -73,7 +73,9 @@ class Slakh2100(Dataset):
         transcription: bool,
         random_crop: bool,
         source: bool,
-        MIDI_MAPPING,
+        name_to_ix: dict,
+        ix_to_name: dict,
+        plugin_labels_num: int,
         sample_rate=16000,   
     ):
         r"""Instrument classification dataset takes the meta of an audio
@@ -102,9 +104,9 @@ class Slakh2100(Dataset):
             self.segment_samples = None
             
 
-        self.name_to_ix = MIDI_MAPPING.NAME_TO_IX
-        self.ix_to_name = MIDI_MAPPING.IX_TO_NAME
-        self.plugin_labels_num = MIDI_MAPPING.plugin_labels_num        
+        self.name_to_ix = name_to_ix
+        self.ix_to_name = ix_to_name
+        self.plugin_labels_num = plugin_labels_num        
 
         
         # random seed
@@ -215,8 +217,6 @@ class Slakh2100(Dataset):
 
                 # pkl_path = os.path.join(self.notes_pkls_dir, '{}.pkl'.format(pathlib.Path(hdf5_name).stem))
                 # events_dict = pickle.load(open(pkl_path, 'rb'))
-                print(f"{flac_name=}")
-                print(f"{pathlib.Path(flac_name).stem=}")
                 event_list = self.total_dict[pathlib.Path(flac_name).stem] # why do I need .Path.stem?
 
                 segment_notes_dict = {}
@@ -295,7 +295,6 @@ class Slakh2100(Dataset):
 #                
                               
                 try:
-                    print(f"{source_path=}")
                     source_waveform, sr = torchaudio.load(source_path)
                     source_waveform = source_waveform[0,start_sample : end_sample]
                     assert sr==self.sample_rate,\
