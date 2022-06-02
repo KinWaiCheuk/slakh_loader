@@ -54,8 +54,8 @@ from slakh_loader.MIDI_program_map import (
                                       )
                                       
 dataset = Slakh2100('train',
-          './waveforms/',
-          './instruments_classification_notes_MIDI_class/',
+          waveform_dir='./waveforms/',
+          notes_pkls_dir='./instruments_classification_notes_MIDI_class/',
           segment_seconds=11,
           frames_per_second = 100,
           transcription = True,
@@ -103,6 +103,26 @@ target_dict
 
 [plugin_id](./examples/plugin_id.md) has no practical use in this current release. It is a placeholder for future expansion. 
 
+### Arguments
 
+`waveform_dir`: The location of the `waveform` folder mentioned in the [preprocessing](#Preprocessing) section.
 
+`notes_pkls_dir`: The location of the `instruments_classification_notes_MIDI_class` folder mentioned in the [preprocessing](#Preprocessing) section.
 
+`segment_seconds`: The segment length of the audio clip sampled from the full audio. If `segment_seconds=None`, then a full audio is loaded instead.
+
+`frames_per_second`: Number of spectrogram frames per second. It is for extracting a correct piano roll matching with the spectrogram frames. If `sample_rate=16000` and `hop_size=160`, then `frames_per_second=16000/160` which is `100`.
+
+`transcription`: A boolean to determine whether to load piano rolls for transcription task.
+
+`random_crop`: A boolean to determine if an audio clips should be randomly sampled from the full audio. If it is set to `False`, it will always load the first `segment_seconds` of audio from the full audio track.
+
+`source`: A boolean value to determine whether to load the sources of the audio tracks for music source separation.
+
+`name_to_ix`: A dictionary that maps instrument names to theirs indices. The dictionary can be obtained by `from slakh_loader.MIDI_program_map import MIDIClassName2class_idx` which has an extra `empty` key for future expansion.
+
+`ix_to_name`: A dictionary that maps instrument indices to their names. . The dictionary can be obtained by `from slakh_loader.MIDI_program_map import class_idx2MIDIClass` which has an extra `empty` key for future expansion.
+
+`plugin_labels_num`: The number valid instrument labels for `name_to_ix` and `ix_to_name`. If `plugin_labels_num < len(name_to_ix)` or `plugin_labels_num < len(ix_to_name)`, then only the first `plugin_labels_num` keys in `name_to_ix` and `ix_to_name` will be used.
+
+`sample_rate`: The sampling rate for the audio clips.
