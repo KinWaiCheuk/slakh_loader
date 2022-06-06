@@ -45,7 +45,7 @@ Each `idx` under the `__getitem__` function corresponds to each track `TrackXXXX
 
 The dataset can be loaded using:
 
-```
+```python
 from slakh_loader.slakh2100 import Slakh2100
 from slakh_loader.MIDI_program_map import (
                                       MIDI_Class_NUM,
@@ -126,3 +126,29 @@ target_dict
 `plugin_labels_num`: The number valid instrument labels for `name_to_ix` and `ix_to_name`. If `plugin_labels_num < len(name_to_ix)` or `plugin_labels_num < len(ix_to_name)`, then only the first `plugin_labels_num` keys in `name_to_ix` and `ix_to_name` will be used.
 
 `sample_rate`: The sampling rate for the audio clips.
+
+## Packing data into a batch
+Assume that you have successfullly created the `dataset` object as described [here](#Loading-method). After that, you need to use `End2EndBatchDataPreprocessor` to help packing the dictionary into a batch.
+
+`End2EndBatchDataPreprocessor` randomly samples stems (dictionary key `sources`) and piano rolls (dictionary key `target_dict`) from each track based on the `samples` parameter.
+
+```
+from slakh_loader.slakh2100 import collate_slakh, End2EndBatchDataPreprocessor
+batch_processor = End2EndBatchDataPreprocessor(name_to_ix=MIDIClassName2class_idx,
+                                               ix_to_name=class_idx2MIDIClass,
+                                               plugin_labels_num=MIDI_Class_NUM-1,
+                                               mode='imbalance',
+                                               temp=0.5,
+                                               samples=3,
+                                               neg_samples=1,
+                                               audio_noise=0,
+                                               transcription=True,
+                                               source_separation=False)
+
+
+loader = DataLoader(dataset, batch_size=2, collate_fn=collate_slakh)
+batch_dict = next(iter(loader))
+
+                                               
+batch = batch_processor(batch_dict)    
+```

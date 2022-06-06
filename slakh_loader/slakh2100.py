@@ -340,7 +340,9 @@ class End2EndBatchDataPreprocessor:
     """
     
     def __init__(self,
-                 MIDI_MAPPING,
+                 name_to_ix,
+                 ix_to_name,
+                 plugin_labels_num,
                  mode,
                  temp,
                  samples,
@@ -357,9 +359,9 @@ class End2EndBatchDataPreprocessor:
         elif mode=='imbalance':
             self.process = self._sample_imbalance
             
-        self.name_to_ix = MIDI_MAPPING.NAME_TO_IX
-        self.ix_to_name = MIDI_MAPPING.IX_TO_NAME
-        self.plugin_labels_num = MIDI_MAPPING.plugin_labels_num
+        self.name_to_ix = name_to_ix
+        self.ix_to_name = ix_to_name 
+        self.plugin_labels_num = plugin_labels_num 
         self.temp = temp
         self.inst_samples = samples
         self.neg_inst_samples = neg_samples
@@ -519,7 +521,7 @@ class End2EndBatchDataPreprocessor:
                 conditions[n*self.total_samples+idx, plugin_id] = 1
                 waveforms[n*self.total_samples+idx] = batch['waveform'][n] # repeat the same waveform for different instruments
                 if 'sources' in batch.keys():
-                    sources[n*self.total_samples+idx] = torch.from_numpy(batch['sources'][n][self.ix_to_name[int(plugin_id)]])
+                    sources[n*self.total_samples+idx] = batch['sources'][n][self.ix_to_name[int(plugin_id)]]
                     masks[n*self.total_samples+idx] = batch['source_masks'][n][self.ix_to_name[int(plugin_id)]]
                 if self.noise:
                     waveforms[n*self.total_samples+idx] += self.noise.sample(batch['waveform'][n].shape) # adding noise to waveform
@@ -602,7 +604,7 @@ class FullPreprocessor:
         unwrapped_batch['target_roll'] = target_roll   
         return unwrapped_batch
      
-        
+
 
 
 def collate_slakh(list_data_dict):
@@ -620,15 +622,17 @@ def collate_slakh(list_data_dict):
             'frame_roll': (batch_size, segment_frames, classes_num),
             ...}
     """
-    np_data_dict = {}
+    data_dict = {}
     for key in list_data_dict[0].keys():
         if key in ['plugin_id', 'segment_notes_dict', 'target_dict', 'sources', 'source_masks']:
-            np_data_dict[key] = [data_dict[key] for data_dict in list_data_dict]
+            data_dict[key] = [data_dict[key] for data_dict in list_data_dict]
         elif key in ['list_at_onset_rolls', 'list_at_segments']:
-            np_data_dict[key] = [torch.Tensor(data_dict[key]) for data_dict in list_data_dict]
-        elif key=='hdf5_name':
-            np_data_dict[key] = [data_dict[key] for data_dict in list_data_dict]
+            data_dict[key] = [torch.Tensor(data_dict[key]) for data_dict in list_data_dict]
+        elif key in ['flac_name']:
+            data_dict[key] = [data_dict[key] for data_dict in list_data_dict]
+        elif key == 'waveform':
+            data_dict[key] = torch.stack([data_dict[key] for data_dict in list_data_dict])
         else:
-            np_data_dict[key] = torch.Tensor(np.array([data_dict[key] for data_dict in list_data_dict]))
+            data_dict[key] = torch.Tensor(np.array([data_dict[key] for data_dict in list_data_dict]))
 
-    return np_data_dict
+    return data_dict
