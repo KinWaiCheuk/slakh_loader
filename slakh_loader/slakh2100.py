@@ -303,7 +303,8 @@ class Slakh2100(Dataset):
                     source_dict[plugin_name] = source_waveform
                     source_mask[plugin_name] = True
                 except Exception as e:
-                    print(e)
+                    # skip audio loading when the file is missing
+                    # print(e)
                     source_dict[plugin_name] = np.zeros(end_sample-start_sample, dtype=np.float32)
                     source_mask[plugin_name] = False        
             data_dict['sources'] = source_dict
@@ -521,8 +522,13 @@ class End2EndBatchDataPreprocessor:
                 conditions[n*self.total_samples+idx, plugin_id] = 1
                 waveforms[n*self.total_samples+idx] = batch['waveform'][n] # repeat the same waveform for different instruments
                 if 'sources' in batch.keys():
-                    sources[n*self.total_samples+idx] = batch['sources'][n][self.ix_to_name[int(plugin_id)]]
-                    masks[n*self.total_samples+idx] = batch['source_masks'][n][self.ix_to_name[int(plugin_id)]]
+                    # load source when the audio file appears
+                    if batch['source_masks'][n][self.ix_to_name[int(plugin_id)]]:
+                        sources[n*self.total_samples+idx] = batch['sources'][n][self.ix_to_name[int(plugin_id)]]
+                        masks[n*self.total_samples+idx] = batch['source_masks'][n][self.ix_to_name[int(plugin_id)]]
+                    # skip source loading when the audio file is missing
+                    else:
+                        masks[n*self.total_samples+idx] = batch['source_masks'][n][self.ix_to_name[int(plugin_id)]]                        
                 if self.noise:
                     waveforms[n*self.total_samples+idx] += self.noise.sample(batch['waveform'][n].shape) # adding noise to waveform
                 if self.transcription:                    
