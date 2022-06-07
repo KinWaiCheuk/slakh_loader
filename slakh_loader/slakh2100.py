@@ -241,10 +241,7 @@ class Slakh2100(Dataset):
 
             valid_length = len(waveform_seg)
             self.segment_seconds = valid_length/self.sample_rate
-            # (segment_samples,), e.g., (160000,)
 
-            # pkl_path = os.path.join(self.notes_pkls_dir, '{}.pkl'.format(pathlib.Path(hdf5_name).stem))
-            # events_dict = pickle.load(open(pkl_path, 'rb'))
             event_list = self.total_dict[pathlib.Path(flac_name).stem]
 
             segment_notes_dict = {}
@@ -279,22 +276,14 @@ class Slakh2100(Dataset):
             source_dict = {}
             source_mask = {}
             split, flac_name = self.audio_name_list[idx]
-#             with h5py.File(hdf5_path, 'r') as hf:
-#                 for plugin_name in unique_plugin_names:
-#                     try:
-#                         source_dict[plugin_name] = int16_to_float32(hf['sources'][plugin_name][()][start_sample : end_sample])
-#                         source_mask[plugin_name] = True
-#                     except:
-#                         source_dict[plugin_name] = np.zeros(end_sample-start_sample, dtype=np.float32)
-#                         source_mask[plugin_name] = False        
+
             for plugin_name in unique_plugin_names:
                 source_path = os.path.join(self.waveform_dir,
                                            split,
                                            flac_name,
-                                           f'{plugin_name}.flac')
-#                
-                              
-                try:
+                                           f'{plugin_name}.flac') 
+
+                if os.path.exists(source_path):
                     source_waveform, sr = torchaudio.load(source_path)
                     source_waveform = source_waveform[0,start_sample : end_sample]
                     assert sr==self.sample_rate,\
@@ -302,11 +291,13 @@ class Slakh2100(Dataset):
                     f"Please double check your audio files."
                     source_dict[plugin_name] = source_waveform
                     source_mask[plugin_name] = True
-                except Exception as e:
+                else:
                     # skip audio loading when the file is missing
                     # print(e)
-                    source_dict[plugin_name] = np.zeros(end_sample-start_sample, dtype=np.float32)
+                    source_dict[plugin_name] = torch.zeros(end_sample-start_sample)
                     source_mask[plugin_name] = False        
+
+
             data_dict['sources'] = source_dict
             data_dict['source_masks'] = source_mask
         
@@ -560,68 +551,108 @@ class End2EndBatchDataPreprocessor:
         unwrapped_batch['source_masks'] = masks.to(self.device)
         #['waveform', 'valid_length', 'target_dict', 'instruments', 'plugin_id'])
         return unwrapped_batch    
-        
-    
-class FullPreprocessor:
-    """
-    Make this unwrapping a batch (BatchUnwrapping)
-    For example, in a batch with 1 waveforms and 3 conditions,
-    make it a batch size 3 with the following 3 samples
-    (wave1, cond1, roll1), (wave1, cond2, roll2), (wave1, cond3, roll3).
-    
-    By doing so, the feedforward
-    """
-    
-    def __init__(self, MIDI_MAPPING):               
-        self.random_state = np.random.RandomState(1234)
-        self.process = self._sample_full
 
-        self.name_to_ix = MIDI_MAPPING.NAME_TO_IX
-        self.ix_to_name = MIDI_MAPPING.IX_TO_NAME
-        self.plugin_labels_num = MIDI_MAPPING.plugin_labels_num
 
+class SlakhCollator:
+    def __init__(
+        self,
+        name_to_ix,
+        ix_to_name,
+        plugin_labels_num,
+        temp = 0.5,
+        noise = 0.0,
+        inst_samples = 3,
+        neg_inst_samples = 0,
+    ):
+        self.name_to_ix = name_to_ix
+        self.ix_to_name = ix_to_name
+        self.plugin_labels_num = plugin_labels_num
+        self.temp = temp
+        self.noise = noise
+        self.inst_samples = inst_samples
+        self.neg_inst_samples = neg_inst_samples
+        self.total_samples = self.inst_samples+self.neg_inst_samples # This is for mining both pos and neg training samples        
+
+    def __call__(self, list_data_dict):    
+        batch_size = len(list_data_dict)
+        if 'target_dict' in list_data_dict[0].keys():
+            # obtaining a random instrument key. e.g. Electric Guitar
+            key = list(list_data_dict[0]['target_dict'].keys())[0]
+            target_dict = {}
             
-    def __call__(self, batch):
-        return self.process(batch)
-    
-    def _sample_full(self, batch):
-        # Extracting conditions and unwrapping batch
-        batch_size = len(batch['instruments'])
-        num_classes = batch['instruments'].shape[-1]
-        counter = 0
+            # use the random inst. key to get different roll types
+            # [onset_roll, reg_onset_roll, frame_roll, mask_roll]
+            for roll_type, roll_tensor in list_data_dict[0]['target_dict'][key].items():
+                # create placeholders for the rolls
+                target_dict[roll_type] = torch.zeros((batch_size*self.total_samples, *roll_tensor.shape))
+                
+        # Placeholders for other data
+        waveforms = torch.zeros(batch_size*self.total_samples, list_data_dict[0]['waveform'].size(-1))
+        sources = torch.zeros(batch_size*self.total_samples, list_data_dict[0]['waveform'].size(-1))
+        masks = torch.zeros(batch_size*self.total_samples, 1)
+        conditions = torch.zeros(batch_size*self.total_samples, self.plugin_labels_num)                
+
         unwrapped_batch = {}       
-        
-        # randomly pick one inst to get the pianoroll shape information
-        inst_str = list(batch['target_dict'][0].keys())[0]
-        roll_shape = batch['target_dict'][0][inst_str]['onset_roll'].shape
-        # creating placeholders for target roll
-        target_roll = torch.zeros(batch_size, num_classes, *roll_shape).to(batch['instruments'].device)            
-        
-        plugin_id_list = []
         for n in range(batch_size): # Looping through the batchsize
-            plugin_ids = torch.where(batch['instruments'][n]==1)[0]
-            plugin_id_list.append(plugin_ids)
-            for ix in plugin_ids:
-                target_roll[n, ix] = torch.from_numpy(batch['target_dict'][n][self.ix_to_name[ix.item()]]['frame_roll'])
+            plugin_ids = torch.where(torch.from_numpy(
+                list_data_dict[n]['instruments']==1))[0]
+            neg_plugin_ids = torch.where(torch.from_numpy(
+                list_data_dict[n]['instruments']==0))[0]
             
-        #['waveform', 'valid_length', 'target_dict', 'instruments', 'plugin_id']                                                         
-        unwrapped_batch['waveforms'] = batch['waveform']
-        unwrapped_batch['plugin_ids'] = plugin_id_list
-        unwrapped_batch['target_roll'] = target_roll   
-        return unwrapped_batch
-     
+            # sampling uncommon instrument more often
+            occurrence = np.array(list(map(idx2occurrence_map.get, plugin_ids.cpu().tolist())))
+            temp_occ = (1/occurrence)**self.temp
+            inverse_prob = temp_occ/temp_occ.sum()
+            plugin_ids = np.random.choice(plugin_ids, self.inst_samples, p=inverse_prob)
+            neg_plugin_ids = np.random.choice(neg_plugin_ids, self.neg_inst_samples)
+            
+            # packing different instruenmts into the new batch
+            for idx, plugin_id in enumerate(plugin_ids):
+                conditions[n*self.total_samples+idx, plugin_id] = 1
+                waveforms[n*self.total_samples+idx] = list_data_dict[n]['waveform'] # repeat the same waveform for different instruments
+                if 'sources' in list_data_dict[n].keys():
+                    sources[n*self.total_samples+idx] = list_data_dict[n]['sources'][self.ix_to_name[int(plugin_id)]]
+                    masks[n*self.total_samples+idx] = list_data_dict[n]['source_masks'][self.ix_to_name[int(plugin_id)]]
+                if self.noise:
+                    waveforms[n*self.total_samples+idx] += self.noise.sample(list_data_dict[n]['waveform'].shape) # adding noise to waveform
+                if 'target_dict' in list_data_dict[n].keys(): # do this when piano rolls exists
+                    for roll_type in list_data_dict[n]['target_dict'][self.ix_to_name[int(plugin_id)]].items():
+                        target_dict[roll_type[0]][n*self.total_samples+idx] = torch.from_numpy(roll_type[1])
+                    
+                    
+            # packing negative instruenmts into the new batch
+            for neg_idx, neg_plugin_id in enumerate(neg_plugin_ids):
+                conditions[n*self.total_samples+idx+neg_idx+1, neg_plugin_id] = 1
+                waveforms[n*self.total_samples+idx+neg_idx+1] = list_data_dict[n]['waveform'] # repeat the same waveform for different instruments
+                if 'sources' in list_data_dict[n].keys():               
+                    sources[n*self.total_samples+idx+neg_idx+1] = torch.zeros_like(list_data_dict[n]['waveform']) # create an empty waveform for neg sample
+                    masks[n*self.total_samples+idx+neg_idx+1] = list_data_dict[n]['source_masks'][self.ix_to_name[int(plugin_id)]]               
+                if self.noise:
+                    waveforms[n*self.total_samples+idx+1] += self.noise.sample(list_data_dict[n]['waveform'].shape) # adding noise to waveform
+                if 'target_dict' in list_data_dict[n].keys(): # do this when piano rolls exists           
+                    for roll_type in list_data_dict[n]['target_dict'][self.ix_to_name[int(plugin_id)]].items():
+                        target_dict[roll_type[0]][n*self.total_samples+idx+neg_idx+1] = torch.zeros_like(torch.from_numpy(roll_type[1]))
+                    
+                    
 
 
+        unwrapped_batch['waveforms'] = waveforms
+        unwrapped_batch['conditions'] = conditions
+        if 'target_dict' in list_data_dict[0].keys(): # do this when piano rolls exists      
+            unwrapped_batch['target_dict'] = target_dict
+        if 'sources' in list_data_dict[0].keys():               
+            unwrapped_batch['sources'] = sources
+            unwrapped_batch['source_masks'] = masks
+        #['waveform', 'valid_length', 'target_dict', 'instruments', 'plugin_id'])
+        return unwrapped_batch    
 
 def collate_slakh(list_data_dict):
     r"""Collate input and target of segments to a mini-batch.
-
     Args:
         list_data_dict: e.g. [
             {'waveform': (segment_samples,), 'frame_roll': (segment_frames, classes_num), ...},
             {'waveform': (segment_samples,), 'frame_roll': (segment_frames, classes_num), ...},
             ...]
-
     Returns:
         data_dict: e.g. {
             'waveform': (batch_size, segment_samples)
@@ -641,4 +672,4 @@ def collate_slakh(list_data_dict):
         else:
             data_dict[key] = torch.Tensor(np.array([data_dict[key] for data_dict in list_data_dict]))
 
-    return data_dict
+    return data_dict    

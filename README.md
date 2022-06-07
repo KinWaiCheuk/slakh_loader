@@ -127,7 +127,7 @@ target_dict
 
 `sample_rate`: The sampling rate for the audio clips.
 
-## Packing data into a batch
+## Packing data into a batch v1
 Assume that you have successfullly created the `dataset` object as described [here](#Loading-method). After that, you need to use `End2EndBatchDataPreprocessor` to help packing the dictionary into a batch.
 
 `End2EndBatchDataPreprocessor` randomly samples stems (dictionary key `sources`) and piano rolls (dictionary key `target_dict`) from each track based on the `samples` parameter.
@@ -152,3 +152,16 @@ batch_dict = next(iter(loader))
                                                
 batch = batch_processor(batch_dict)    
 ```
+
+## Packing data into a batch v2
+```
+from slakh_loader.slakh2100 import SlakhCollator
+
+
+loader = DataLoader(dataset, batch_size=2, collate_fn=collate_slakh)
+batch_dict = next(iter(loader))
+
+                                               
+batch = batch_processor(batch_dict)    
+```
+
