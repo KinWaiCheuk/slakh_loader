@@ -22,6 +22,26 @@ This dataset is suitable for the following tasks:
 - Music Source Separation (MSS)
 
 ## Preprocessing
+Assume that you have the dataset folder inside this repo, if you want to make use of all your CPU threads (`num_workers = -1`) preprocess the audio files into `16kHz` sampling rate and save them into a folder called `waveforms`:
+
+```python
+from slakh_loader.preprocessing import pack_audio_clips
+pack_audio_clips(input_dir = './slakh2100_flac_redux/',
+                 output_dir = 'waveforms',
+                 sample_rate = 16000,
+                 num_workers = -1
+                )
+```
+
+
+If you want to preprocess the train set of midi files:
+```python
+from slakh_loader.preprocessing import create_notes
+create_notes('./slakh2100_flac_redux/', 
+             './', 
+             'train')
+```
+
 By default, each `SXX.flac` and `SXX.mid` corresponds to one Komplete 12 plugin/patch defined in this [json file](https://github.com/ethman/slakh-generation/blob/e6454eb57a3683b99cdd16695fe652f83b75bb14/instr_defs_metadata/komplete_strict.json). We map these plugins/patches into MIDI instruments based on our custom [MIDI map](./slakh_loader/MIDI_program_map.tsv). Based on this custom map, all `SXX.mid` for each track become one `TrackXXXXX.pkl` file under the `instruments_classification_notes_MIDI_class` folder; all `SXX.flac` for each track are remapped to:
 
 ```
@@ -39,6 +59,8 @@ waveforms
 ```
 
 The remapping of `SXX.flac` also includes audio downsampling to 16kHz. So we also have `waveform.flac` as the downsampled version of `mix.flac`
+
+
 
 ## Loading method
 Each `idx` under the `__getitem__` function corresponds to each track `TrackXXXXX` in the dataset. Then, the audio mix `waveform.flac` is loaded as the `waveform` key.
