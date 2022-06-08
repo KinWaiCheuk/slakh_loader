@@ -52,7 +52,7 @@ def pack_audio_clips(
     """
 
     for split in ["train", "test", "validation"]:
-        split_output_dir = os.path.join(output_dir, split)
+        split_output_dir = os.path.join(output_dir, 'packed_waveforms', split)
         os.makedirs(split_output_dir, exist_ok=True)
 
         split_input_dir = os.path.join(input_dir, split)
@@ -136,6 +136,161 @@ DRUMS_PLUGIN_NAMES = [
     'stadium_kit_full',
     'street_knowledge_kit',
 ]
+
+
+def create_notes_multithread(path_dataset,
+                 workspace,
+                 split,
+                 num_workers=-1
+                            ):
+    
+    def process_midi(param):
+        [piecename, metadata, split, path_dataset_split] = param
+
+        output_dir = os.path.join(workspace, 'packled_pkl_MIDIclass', split)
+        os.makedirs(output_dir, exist_ok=True)
+
+        path_midi = os.path.join(path_dataset_split, piecename, "MIDI")
+        tracknames = glob.glob(os.path.join(path_midi, "*.mid"))
+        tracknames = [os.path.splitext(os.path.basename(x))[0] for x in tracknames]
+        tracknames.sort()  # ["S01", "S02", "S03", ...]
+
+        # placeholder for the processed MIDI
+        filename_midi = os.path.join(path_dataset_split, piecename, "MIDI", tracknames[0] + ".mid")  
+
+        note_event_list = []    
+        for trackname in tracknames:
+            # E.g., "S00".
+
+            plugin_name = metadata["stems"][trackname]["plugin_name"]
+            program_num = metadata["stems"][trackname]["program_num"]
+
+
+            plugin_name = os.path.splitext(os.path.basename(plugin_name))[0]
+            # E.g., 'elektrik_guitar'.
+
+            # Read MIDI file of a track
+            midi_data = pretty_midi.PrettyMIDI(filename_midi)
+
+            if len(midi_data.instruments) > 1:
+                raise Exception("multi-track midi")
+
+            instr = midi_data.instruments[0]
+
+            # Append all notes of a track to output_list if not drums.
+            if plugin_name not in DRUMS_PLUGIN_NAMES:
+                # instrument_set.add(program_num)
+
+                for note in instr.notes:
+
+                    # Lower an octave for bass.
+                    if instr.program in range(32, 40):
+                        pitch = note.pitch - 12
+                    else:
+                        pitch = note.pitch
+
+                    note_event = {
+                        'split': split,
+                        'audio_name': piecename,
+                        'plugin_name': idx2instrument_class[program_num],
+                        'plugin_names': [idx2instrument_class[program_num]],
+                        'start': note.start,
+                        'end': note.end,
+                        'pitch': pitch,
+                        'velocity': note.velocity,
+                    }
+
+                    # Remove notes with MIDI pitches larger than 109 (very few).
+                    if note.pitch < 109:
+                        # output_list.append(note_event)
+                        note_event_list.append(note_event)
+            else:
+                # instrument_set.add(program_num)
+                for note in instr.notes:
+                    # Parse only valid drum pitch. MIDI note 35-81
+                    # But in FL studio, it supports 24-84?
+                    # Better make the range a bit larger
+                    if note.pitch>=24 and note.pitch<=90:
+                        note_event = {
+                            'split': split,
+                            'audio_name': piecename,
+                            'plugin_name': 'Drums',
+                            'plugin_names': ['Drums'],
+                            'start': note.start,
+                            'end': note.end,
+                            'pitch': note.pitch,
+                            'velocity': note.velocity,
+                        }
+
+                    # Remove notes with MIDI pitches larger than 109 (very few).
+                    if note.pitch < 109:
+                        # output_list.append(note_event)
+                        note_event_list.append(note_event)                
+
+
+
+        note_event_list.sort(key=lambda note_event: note_event['start'])
+
+        note_event_list = add2(note_event_list)
+        # output_list += note_event_list
+
+        # E.g., output_list looks like: [
+        #     {'split': 'train', 'audio_name': 'Track00001', 'plugin_name':
+        #      'elektrik_guitar', 'start': 0.7811, 'end': 1.2576, 'pitch': 64, 'velocity': 127,
+        #     },
+        #     ...
+        #     {'split': 'train', 'audio_name': 'Track00003', 'plugin_name':
+        #      'jazz_guitar2', 'start': 58.2242, 'end': 58.4500, 'pitch': 57, 'velocity': 100,
+        #     },
+        #     ...
+        # ]
+
+        output_path = os.path.join(output_dir, '{}.pkl'.format(pathlib.Path(piecename).stem))
+        pickle.dump(note_event_list, open(output_path, 'wb'))        
+    r"""Create list of notes information for instrument classification.
+    Args:
+        path_dataset: str, he path of the original dataset
+        workspace: str
+        split: str, 'train' | 'validation' | 'test'
+    Returns:
+        None
+    """
+    path_dataset = path_dataset
+    workspace = workspace
+    split = split
+
+    # paths
+
+    # MIDI file names.
+    path_dataset_split = os.path.join(path_dataset, split)
+    piecenames = os.listdir(path_dataset_split)
+    piecenames = [x for x in piecenames if x[0] != "."]
+    piecenames.sort()
+    # print("total piece number in %s set: %d" % (split, len(piecenames))
+
+    # output_list = []
+    # instrument_set = set()
+    params = [] # the argument for the fuction process_midi()
+    for piecename in tqdm(piecenames):
+
+        # Read metadata of an audio piece. The metadata includes plugin
+        # names for all tracks.
+        filename_info = os.path.join(path_dataset_split, piecename, "metadata.yaml")
+
+        with open(filename_info, 'r') as stream:
+            try:
+                metadata = yaml.safe_load(stream)
+            except yaml.YAMLError as exc:
+                print(exc)
+
+        # Get the trackname.
+
+
+        params.append((piecename, metadata, split, path_dataset_split))
+        
+    with tqdm_joblib(tqdm(desc=f"Packing {split} set midi files", total=len(params))) as progress_bar:
+            Parallel(n_jobs=num_workers)\
+                    (delayed(process_midi)(param) for param in params)             
 
 
 def create_notes(path_dataset,
