@@ -226,7 +226,6 @@ def process_midi(piecename, metadata, split, path_dataset_split, workspace):
 
 
     note_event_list.sort(key=lambda note_event: note_event['start'])
-    torch.save(note_event_list, f'wonrg_{piecename}.pt')
 
     note_event_list = add2(note_event_list)
     # output_list += note_event_list
@@ -247,7 +246,6 @@ def process_midi(piecename, metadata, split, path_dataset_split, workspace):
 
 def create_notes_multithread(path_dataset,
                  workspace,
-                 split,
                  num_workers=-1
                             ):   
     r"""Create list of notes information for instrument classification.
@@ -260,43 +258,40 @@ def create_notes_multithread(path_dataset,
     """
     path_dataset = path_dataset
     workspace = workspace
-    split = split
 
     # paths
-
-    # MIDI file names.
-    path_dataset_split = os.path.join(path_dataset, split)
-    piecenames = os.listdir(path_dataset_split)
-    piecenames = [x for x in piecenames if x[0] != "."]
-    piecenames.sort()
-    # print("total piece number in %s set: %d" % (split, len(piecenames))
-
-    # output_list = []
-    # instrument_set = set()
     if num_workers==-1:
         num_workers = mp.cpu_count()
     pool = mp.Pool(num_workers)
     
     params = [] # the argument for the fuction process_midi()
     
-    pbar = tqdm(total=len(piecenames)) # create the progress bar for apply_async
-    for piecename in piecenames:
+    for split in ["train", "test", "validation"]:  
+        # MIDI file names.
+        path_dataset_split = os.path.join(path_dataset, split)
+        piecenames = os.listdir(path_dataset_split)
+        piecenames = [x for x in piecenames if x[0] != "."]
+        piecenames.sort()
+        # print("total piece number in %s set: %d" % (split, len(piecenames))
 
-        # Read metadata of an audio piece. The metadata includes plugin
-        # names for all tracks.
-        filename_info = os.path.join(path_dataset_split, piecename, "metadata.yaml")
+        pbar = tqdm(total=len(piecenames), desc=f'processing {split} set midi') # create the progress bar for apply_async
+        for piecename in piecenames:
 
-        with open(filename_info, 'r') as stream:
-            try:
-                metadata = yaml.safe_load(stream)
-            except yaml.YAMLError as exc:
-                print(exc)
+            # Read metadata of an audio piece. The metadata includes plugin
+            # names for all tracks.
+            filename_info = os.path.join(path_dataset_split, piecename, "metadata.yaml")
 
-        param = (piecename, metadata, split, path_dataset_split, workspace)
-        # without the lambda function, this error occurs
-        # TypeError: 'bool' object is not callable
-        r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())       
-        # print(r.get()) # debugging multithread
+            with open(filename_info, 'r') as stream:
+                try:
+                    metadata = yaml.safe_load(stream)
+                except yaml.YAMLError as exc:
+                    print(exc)
+
+            param = (piecename, metadata, split, path_dataset_split, workspace)
+            # without the lambda function, this error occurs
+            # TypeError: 'bool' object is not callable
+            r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())       
+            # print(r.get()) # debugging multithread
     pool.close()
     # pool.join()         
         
@@ -429,7 +424,6 @@ def create_notes(path_dataset,
 
         
         note_event_list.sort(key=lambda note_event: note_event['start'])
-        torch.save(note_event_list, f'right_{piecename}.pt')
 
         note_event_list = add2(note_event_list)
         # output_list += note_event_list
