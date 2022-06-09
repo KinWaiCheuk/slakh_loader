@@ -22,6 +22,15 @@ This dataset is suitable for the following tasks:
 - Music Source Separation (MSS)
 
 ## Preprocessing
+### From redux to original
+To convert Slakh2100 back to the original version, you can run this command:
+```bash
+python resplit_slakh.py -d /path/to/slakh2100/ -r
+```
+
+For more information about different versions of Slakh2100, please refer to this [page](https://github.com/ethman/slakh-utils#make-splits).
+
+### Audio and midi packing
 Assume that you have the dataset folder inside this repo, if you want to make use of all your CPU threads (`num_workers = -1`) preprocess the audio files into `16kHz` sampling rate and save them into a folder called `waveforms`:
 
 ```python
