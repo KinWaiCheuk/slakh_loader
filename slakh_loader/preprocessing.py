@@ -274,7 +274,7 @@ def create_notes_multithread(path_dataset,
         piecenames.sort()
         # print("total piece number in %s set: %d" % (split, len(piecenames))
 
-        pbar = tqdm(total=len(piecenames), desc=f'processing {split} set midi') # create the progress bar for apply_async
+        pbar = tqdm(desc=f'processing {split} set midi') # create the progress bar for apply_async
         for piecename in piecenames:
 
             # Read metadata of an audio piece. The metadata includes plugin
