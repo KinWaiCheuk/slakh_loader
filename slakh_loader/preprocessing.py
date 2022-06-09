@@ -73,10 +73,10 @@ def pack_audio_clips_multithread(
             os.makedirs(output_path, exist_ok=True)
 
             param = (audio_path, output_path, audio_name, split, sample_rate)
-            params.append(param)
         
             r = pool.apply_async(write_audio, args=param, callback=lambda x: pbar.update())
-    pool.close()
+    pool.close() # stop mp when all jobs are done
+    pool.join() # wait for all ljobs to be finished
 
 
 def write_audio(audio_path, output_path, audio_name, split, sample_rate):
@@ -253,14 +253,14 @@ def create_notes_multithread(path_dataset,
     if num_workers==-1:
         num_workers = mp.cpu_count()
     pool = mp.Pool(num_workers)
-    
+    pbar = tqdm(desc=f'processing midi') # create the progress bar for apply_async    
     for split in ["train", "test", "validation"]:
         # MIDI file names.
         path_dataset_split = os.path.join(path_dataset, split)
         piecenames = os.listdir(path_dataset_split)
         piecenames = [x for x in piecenames if x[0] != "."]
         piecenames.sort()
-        pbar = tqdm(desc=f'processing {split} set midi') # create the progress bar for apply_async
+
         for piecename in piecenames:
 
             # Read metadata of an audio piece. The metadata includes plugin
@@ -278,7 +278,8 @@ def create_notes_multithread(path_dataset,
             # TypeError: 'bool' object is not callable
             r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())
             # print(r.get()) # debugging multithread
-    pool.close()          
+    pool.close() # stop mp when all jobs are done
+    pool.join() # wait for all ljobs to be finished    
 
 
 def create_notes(path_dataset,
