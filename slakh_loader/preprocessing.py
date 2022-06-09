@@ -41,7 +41,7 @@ def tqdm_joblib(tqdm_object):
         joblib.parallel.BatchCompletionCallBack = old_batch_callback
         tqdm_object.close()
 
-def pack_audio_clips(
+def pack_audio_clips_multithread(
     input_dir: str,
     output_dir: str,
     sample_rate: int,
@@ -55,47 +55,37 @@ def pack_audio_clips(
     Returns:
         None
     """
-
+    if num_workers==-1:
+        num_workers = mp.cpu_count()
+    pool = mp.Pool(num_workers)
+    pbar = tqdm(desc=f'processing audio') # create the progress bar for apply_async
     for split in ["train", "test", "validation"]:
+        
         split_output_dir = os.path.join(output_dir, 'packed_waveforms', split)
         os.makedirs(split_output_dir, exist_ok=True)
 
         split_input_dir = os.path.join(input_dir, split)
         audio_names = sorted(os.listdir(split_input_dir))
 
-#         print("------ Split: {} (Total: {} clips) ------".format(split, len(audio_names)))
-
-        params = []
         for audio_name in audio_names:
             audio_path = os.path.join(split_input_dir, audio_name, "mix.flac")
             output_path = os.path.join(split_output_dir, audio_name)
             os.makedirs(output_path, exist_ok=True)
 
             param = (audio_path, output_path, audio_name, split, sample_rate)
-            # E.g., (0, './datasets/dataset-slakh2100/slakh2100_flac/train/Track00001/mix.flac',
-            # './workspaces/hdf5s/waveforms/train/Track00001.h5', 'Track00001', 'train', 16000)
             params.append(param)
-        # Debug by uncomment the following code.
-        # write_single_audio_to_hdf5(params[0])
-
-        # Pack audio files to hdf5 files in parallel.
-#         with ProcessPoolExecutor(max_workers=None) as pool:
-#             pool.map(write_audio, params)
-        with tqdm_joblib(tqdm(desc=f"Packing {split} set audio clips", total=len(params))) as progress_bar:
-                Parallel(n_jobs=num_workers)\
-                        (delayed(write_audio)(param) for param in params)     
+        
+            r = pool.apply_async(write_audio, args=param, callback=lambda x: pbar.update())
+    pool.close()
 
 
-
-def write_audio(param):
+def write_audio(audio_path, output_path, audio_name, split, sample_rate):
     r"""Write a single audio file into an hdf5 file.
     Args:
         param: (audio_index, audio_path, output_path, audio_name, split, sample_rate)
     Returns:
         None
     """
-    
-    [audio_path, output_path, audio_name, split, sample_rate] = param
     audio, sr = torchaudio.load(audio_path)
     audio = F.resample(audio.squeeze(0), sr, sample_rate)
 
@@ -264,16 +254,12 @@ def create_notes_multithread(path_dataset,
         num_workers = mp.cpu_count()
     pool = mp.Pool(num_workers)
     
-    params = [] # the argument for the fuction process_midi()
-    
-    for split in ["train", "test", "validation"]:  
+    for split in ["train", "test", "validation"]:
         # MIDI file names.
         path_dataset_split = os.path.join(path_dataset, split)
         piecenames = os.listdir(path_dataset_split)
         piecenames = [x for x in piecenames if x[0] != "."]
         piecenames.sort()
-        # print("total piece number in %s set: %d" % (split, len(piecenames))
-
         pbar = tqdm(desc=f'processing {split} set midi') # create the progress bar for apply_async
         for piecename in piecenames:
 
@@ -290,14 +276,9 @@ def create_notes_multithread(path_dataset,
             param = (piecename, metadata, split, path_dataset_split, workspace)
             # without the lambda function, this error occurs
             # TypeError: 'bool' object is not callable
-            r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())       
+            r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())
             # print(r.get()) # debugging multithread
-    pool.close()
-    # pool.join()         
-        
-    # with tqdm_joblib(tqdm(desc=f"Packing {split} set midi files", total=len(params))) as progress_bar:
-    #         Parallel(n_jobs=num_workers)\
-    #                 (delayed(process_midi)(param) for param in params)             
+    pool.close()          
 
 
 def create_notes(path_dataset,
