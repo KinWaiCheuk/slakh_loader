@@ -67,7 +67,7 @@ class Slakh2100(Dataset):
         self,
         split: str,
         waveform_dir: str,
-        notes_pkls_dir,
+        pkl_dir,
         segment_seconds: str,
         frames_per_second: int,
         transcription: bool,
@@ -90,7 +90,7 @@ class Slakh2100(Dataset):
             augmentor: Augmentor
         """
         self.waveform_dir = waveform_dir
-        self.notes_pkls_dir = notes_pkls_dir
+        self.pkl_dir = pkl_dir
         self.segment_seconds = segment_seconds
         self.frames_per_second = frames_per_second
         self.transcription = transcription
@@ -123,9 +123,9 @@ class Slakh2100(Dataset):
         for flac_name in tqdm.tqdm(flac_names, desc=f'Loading {split} set track names'):
             self.audio_name_list.append([split, flac_name])        
 
-        notes_pkls_dir = os.path.join(notes_pkls_dir, split)
-        pkl_names = sorted(os.listdir(notes_pkls_dir))
-        self.pkl_paths = [os.path.join(notes_pkls_dir, pkl_name) for pkl_name in pkl_names]
+        pkl_dir = os.path.join(pkl_dir, split)
+        pkl_names = sorted(os.listdir(pkl_dir))
+        self.pkl_paths = [os.path.join(pkl_dir, pkl_name) for pkl_name in pkl_names]
 
         self.total_dict = {}
 
