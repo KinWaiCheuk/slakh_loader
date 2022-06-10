@@ -306,7 +306,7 @@ class Slakh2100(Dataset):
         data_dict['valid_length'] = valid_length
         data_dict['flac_name'] = flac_name        
 
-        target = np.zeros(self.plugin_labels_num)  # (plugin_names_num,)
+        target = np.zeros(self.plugin_labels_num, dtype=np.float32)  # (plugin_names_num,)
         plugin_ids = [self.name_to_ix[plugin_name] for plugin_name in unique_plugin_names]
         for plugin_id in plugin_ids:          
             target[plugin_id] = 1
