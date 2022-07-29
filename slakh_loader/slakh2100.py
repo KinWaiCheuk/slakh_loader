@@ -65,6 +65,8 @@ idx2occurrence_map= { # This map would be useful for weighted sampling
 class Slakh2100(Dataset):
     def __init__(
         self,
+        slakhdata_root: str,
+        download: bool,
         split: str,
         waveform_dir: str,
         pkl_dir,
@@ -89,6 +91,9 @@ class Slakh2100(Dataset):
             frames_per_second: int, e.g., 100
             augmentor: Augmentor
         """
+        download_path = Path(slakhdata_root)
+        self.download_path = download_path
+        self.download = download        
         self.waveform_dir = waveform_dir
         self.pkl_dir = pkl_dir
         self.segment_seconds = segment_seconds
@@ -108,6 +113,52 @@ class Slakh2100(Dataset):
         self.ix_to_name = ix_to_name
         self.plugin_labels_num = plugin_labels_num        
 
+        
+        self.ext_archive = '.tar.gz'
+        self.name_archive = 'slakh2100_flac_redux'        
+        self.url = "https://zenodo.org/record/4599666/files/slakh2100_flac_redux.tar.gz?download=1"
+        self.checksum = 'f4b71b6c45ac9b506f59788456b3f0c4'        
+        
+        #after preprocessing slakh2100_flac_redux,  packed_pkl and packed_waveforms will be created
+        if self.download:
+            if os.path.isdir(self.waveform_dir) and os.path.isdir(self.pkl_dir) and (('train' and  'test' and 'validation') in os.listdir(self.waveform_dir)) and (('train' and  'test' and 'validation') in os.listdir(self.pkl_dir)):
+                print(f'Preprocessed slakh2100 folder (packed_pkl, packed_waveforms) exists, skipping download')
+            
+            elif os.path.isdir(os.path.join(self.download_path, self.name_archive)):
+                print(f'{self.name_archive} folder exists, skipping download. please preprocess slakh2100 via preprocess_dataset.py  ')             
+                
+            elif os.path.isfile(os.path.join(self.download_path, self.name_archive+self.ext_archive)):
+                print(f'{self.name_archive+self.ext_archive} exists, checking MD5...')
+                check_md5(os.path.join(download_path, self.name_archive+self.ext_archive), self.checksum)
+                print(f'MD5 is correct, extracting...')
+                extract_archive(os.path.join(self.download_path, self.name_archive+self.ext_archive))
+                print(f'Finished extracting, please preprocess slakh2100 via preprocess_dataset.py')
+                
+            else:                    
+                print(f'Downloading from {self.url}')
+                download_url(self.url, self.download_path, hash_value=self.checksum, hash_type='md5')
+                print(f'Extracting {self.name_archive+self.ext_archive}')
+                extract_archive(os.path.join(self.download_path, self.name_archive+self.ext_archive))
+                print(f'Finished extracting, please preprocess slakh2100 via preprocess_dataset.py')
+        
+        else:
+            if os.path.isdir(self.waveform_dir) and os.path.isdir(self.pkl_dir) and (('train' and  'test' and 'validation') in os.listdir(self.waveform_dir) )and (('train' and  'test' and 'validation') in os.listdir(self.pkl_dir)):
+                print(f'Preprocessed slakh2100 folder (packed_pkl, packed_waveforms) found')
+            
+            elif os.path.isdir(os.path.join(download_path, self.name_archive)):
+                print(f'slakh2100_flac_redux folder exists, please preprocess slakh2100 via preprocess_dataset.py')
+            
+            elif os.path.isfile(os.path.join(self.download_path, self.name_archive+self.ext_archive)):
+                print(f'{self.name_archive} folder not found, but {self.name_archive+self.ext_archive} exists. Checking MD5...' )
+                check_md5(os.path.join(download_path, self.name_archive+self.ext_archive), self.checksum)
+                print(f'MD5 is correct, extracting...')
+                extract_archive(os.path.join(self.download_path, self.name_archive+self.ext_archive))
+                print(f'Finished extracting, please preprocess slakh2100 via preprocess_dataset.py')
+
+            else:
+                raise ValueError(f'{download_path} does not contain the prepocessed slakh2100 folder (packed_pkl, packed_waveforms), '
+                                 f'please specify the correct path or download it by setting `download=True`')          
+                
         
         # random seed
         # When using num_workers>0, this line will cause the same crop over and over again
