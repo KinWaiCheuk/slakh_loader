@@ -91,8 +91,7 @@ class Slakh2100(Dataset):
             frames_per_second: int, e.g., 100
             augmentor: Augmentor
         """
-        download_path = Path(slakhdata_root)
-        self.download_path = download_path
+        self.download_path = pathlib.Path(slakhdata_root)
         self.download = download        
         self.waveform_dir = waveform_dir
         self.pkl_dir = pkl_dir
