@@ -1,0 +1,2 @@
+include slakh_loader/MIDI_program_map.tsv
+include slakh_instruments.pkl
