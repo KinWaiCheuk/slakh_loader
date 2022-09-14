@@ -128,7 +128,7 @@ class Slakh2100(Dataset):
                 
             elif os.path.isfile(os.path.join(self.download_path, self.name_archive+self.ext_archive)):
                 print(f'{self.name_archive+self.ext_archive} exists, checking MD5...')
-                check_md5(os.path.join(download_path, self.name_archive+self.ext_archive), self.checksum)
+                check_md5(os.path.join(self.download_path, self.name_archive+self.ext_archive), self.checksum)
                 print(f'MD5 is correct, extracting...')
                 extract_archive(os.path.join(self.download_path, self.name_archive+self.ext_archive))
                 print(f'Finished extracting, please preprocess slakh2100 via preprocess_dataset.py')
@@ -144,18 +144,18 @@ class Slakh2100(Dataset):
             if os.path.isdir(self.waveform_dir) and os.path.isdir(self.pkl_dir) and (('train' and  'test' and 'validation') in os.listdir(self.waveform_dir) )and (('train' and  'test' and 'validation') in os.listdir(self.pkl_dir)):
                 print(f'Preprocessed slakh2100 folder (packed_pkl, packed_waveforms) found')
             
-            elif os.path.isdir(os.path.join(download_path, self.name_archive)):
+            elif os.path.isdir(os.path.join(self.download_path, self.name_archive)):
                 print(f'slakh2100_flac_redux folder exists, please preprocess slakh2100 via preprocess_dataset.py')
             
             elif os.path.isfile(os.path.join(self.download_path, self.name_archive+self.ext_archive)):
                 print(f'{self.name_archive} folder not found, but {self.name_archive+self.ext_archive} exists. Checking MD5...' )
-                check_md5(os.path.join(download_path, self.name_archive+self.ext_archive), self.checksum)
+                check_md5(os.path.join(self.download_path, self.name_archive+self.ext_archive), self.checksum)
                 print(f'MD5 is correct, extracting...')
                 extract_archive(os.path.join(self.download_path, self.name_archive+self.ext_archive))
                 print(f'Finished extracting, please preprocess slakh2100 via preprocess_dataset.py')
 
             else:
-                raise ValueError(f'{download_path} does not contain the prepocessed slakh2100 folder (packed_pkl, packed_waveforms), '
+                raise ValueError(f'{self.download_path} does not contain the prepocessed slakh2100 folder (packed_pkl, packed_waveforms), '
                                  f'please specify the correct path or download it by setting `download=True`')          
                 
         
