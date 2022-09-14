@@ -84,9 +84,11 @@ from slakh_loader.MIDI_program_map import (
                                       class_idx2MIDIClass,
                                       )
                                       
-dataset = Slakh2100('train',
-          waveform_dir='./waveforms/',
-          notes_pkls_dir='./instruments_classification_notes_MIDI_class/',
+dataset = Slakh2100(slakhdata_root='./slakh2100_flac_redux',
+          download= False,
+          split= 'train',
+          waveform_dir='./packed_waveforms',
+          pkl_dir='./packed_pkl',
           segment_seconds=11,
           frames_per_second = 100,
           transcription = True,
