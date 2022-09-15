@@ -390,7 +390,6 @@ class SlakhCollator:
         self.inst_samples = inst_samples
         self.neg_inst_samples = neg_inst_samples
         self.total_samples = self.inst_samples+self.neg_inst_samples # This is for mining both pos and neg training samples        
-
         if mode=='full':
             self.process = self._sample_full
         elif mode=='random':
@@ -399,9 +398,10 @@ class SlakhCollator:
             self.process = self._sample_imbalance        
         
     def __call__(self, batch):
-        return self.process(batch)        
+        device = batch['waveform'].device
+        return self.process(batch, device)        
         
-    def _sample_imbalance(self, batch):    
+    def _sample_imbalance(self, batch, device):    
         batch_size = len(batch['plugin_id'])
         if 'target_dict' in batch.keys():
             # obtaining a random instrument key. e.g. Electric Guitar
@@ -472,7 +472,7 @@ class SlakhCollator:
         #['waveform', 'valid_length', 'target_dict', 'instruments', 'plugin_id'])
         return unwrapped_batch
     
-    def _sample_random(self, batch):
+    def _sample_random(self, batch, device):
         # Extracting basic information
         M = batch['instruments'].sum()
         batch_size = len(batch['plugin_id'])
@@ -543,7 +543,7 @@ class SlakhCollator:
         return unwrapped_batch
     
     
-    def _sample_full(self, batch):
+    def _sample_full(self, batch, device):
         # Extracting conditions and unwrapping batch
         batch_size = len(batch['plugin_id'])
         unwrapped_batch = {}
@@ -552,26 +552,24 @@ class SlakhCollator:
         target_dict = {}        
         plugin_ids = torch.where(batch['instruments'][0]==1)[0]
         for roll_type, roll in batch['target_dict'][0][self.ix_to_name[int(plugin_ids[0])]].items():
-            target_dict[roll_type] = torch.zeros((batch_size, self.plugin_labels_num, *roll.shape))  
+            target_dict[roll_type] = torch.zeros((batch_size, self.plugin_labels_num, *roll.shape)).to(device)  
             
         for n in range(len(batch['instruments'])): # Looping through the batchsize
             plugin_ids = torch.where(batch['instruments'][n]==1)[0]
-            print(f"{plugin_ids=}")
             # Placeholders for a new batch
             waveforms = torch.zeros(batch_size, batch['waveform'].size(-1))
             conditions = torch.zeros(batch_size, self.plugin_labels_num)
             # TODO: replace this hard encoded T=1001 with something better
             
             # creating placeholders for target_dict
-            print(f"{n=}")
             for plugin_id in plugin_ids:
                 for roll_type, roll in batch['target_dict'][n][self.ix_to_name[int(plugin_id)]].items():
-                    print(f"{plugin_id=}")
                     target_dict[roll_type][n][plugin_id] = torch.from_numpy(roll)
 
         unwrapped_batch['waveforms'] = batch['waveform']
         unwrapped_batch['target_dict'] = target_dict
         unwrapped_batch['instruments'] = batch['instruments']
+        
         #['waveform', 'valid_length', 'target_dict', 'instruments', 'plugin_id'])
         return unwrapped_batch    
 
