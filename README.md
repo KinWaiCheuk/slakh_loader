@@ -34,8 +34,8 @@ For more information about different versions of Slakh2100, please refer to this
 Assume that you have the dataset folder inside this repo, if you want to make use of all your CPU threads (`num_workers = -1`) preprocess the audio files into `16kHz` sampling rate and save them into a folder called `waveforms`:
 
 ```python
-from slakh_loader.preprocessing import pack_audio_clips
-pack_audio_clips(input_dir = './slakh2100_flac_redux/',
+from slakh_loader.preprocessing import pack_audio_clips_multithread 
+pack_audio_clips_multithread(input_dir = './slakh2100_flac_redux/',
                  output_dir = 'waveforms',
                  sample_rate = 16000,
                  num_workers = -1
