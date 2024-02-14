@@ -1,10 +1,6 @@
 import os
 import torchaudio
 import torchaudio.functional as F
-from torchaudio.datasets.utils import (
-    download_url,
-    extract_archive,
-)
 from slakh_loader.MIDI_program_map import idx2instrument_class
 
 import contextlib
@@ -16,11 +12,9 @@ import numpy as np
 import pathlib
 import pickle
 import pretty_midi
-import time
 from tqdm import tqdm
 import yaml
 
-import torch
 
 # This is for progress bar for apply_async
 
@@ -61,7 +55,7 @@ def pack_audio_clips_multithread(
     pbar = tqdm(desc=f'processing audio') # create the progress bar for apply_async
     for split in ["train", "test", "validation"]:
         
-        split_output_dir = os.path.join(output_dir, 'packed_waveforms', split)
+        split_output_dir = os.path.join(output_dir, split)
         os.makedirs(split_output_dir, exist_ok=True)
 
         split_input_dir = os.path.join(input_dir, split)
@@ -74,6 +68,8 @@ def pack_audio_clips_multithread(
 
             param = (audio_path, output_path, audio_name, split, sample_rate)
         
+            # # uncomment this for debugging
+            # write_audio(*param)
             r = pool.apply_async(write_audio, args=param, callback=lambda x: pbar.update())
     pool.close() # stop mp when all jobs are done
     pool.join() # wait for all ljobs to be finished
@@ -86,38 +82,45 @@ def write_audio(audio_path, output_path, audio_name, split, sample_rate):
     Returns:
         None
     """
-    audio, sr = torchaudio.load(audio_path)
-    audio = F.resample(audio.squeeze(0), sr, sample_rate)
-
-    duration = len(audio) / sample_rate
-
-    torchaudio.save(os.path.join(output_path, 'waveform.flac'),
-                    audio.unsqueeze(0),
-                    sample_rate)
-    
+    # === Loading the stems and downsample them ===
     dirname = os.path.dirname(audio_path) # getting the folder for the audio
     with open(os.path.join(dirname, "metadata.yaml"), "r") as stream:
+        # getting the stems from the metadata
         stem_dict = yaml.safe_load(stream)['stems']
-
-    source_tracks = {}        
-    for source_key, item in stem_dict.items():
-        if item['midi_saved'] and item['audio_rendered']: # When midi_save=False, there is no audio track
-            source_name = idx2instrument_class[item['program_num']]
-            audio, _ = torchaudio.load(os.path.join(dirname, 'stems', f"{source_key}.flac"))
-            audio = F.resample(audio.squeeze(0), sr, sample_rate)
-#             audio = audio.numpy()
-
+    source_tracks = {}
+    for source_key, item in stem_dict.items(): # looping through the stems
+        # don't load the stem when the annotation (midi) is missing (i.e. midi_save=False)
+        # when the audio is missing, don't load anything (i.e. audio_rendered=False)
+        if item['midi_saved'] and item['audio_rendered']: 
+            source_name = idx2instrument_class[item['program_num']] # mapping program_num based on MIDI_program_map.tsv
+            # TODO: allow a few more mapping options (MIDI class, program_num, custom.)
+            # load the stem and resample
+            audio, sr_stem = torchaudio.load(os.path.join(dirname, 'stems', f"{source_key}.flac"))
+            audio = F.resample(audio.squeeze(0), sr_stem, sample_rate)
             if source_name in source_tracks.keys():
+                # if the source is already in the dictionary, add the audio to the existing audio
                 source_tracks[source_name] += audio
-            else:              
+            else:
+                # if the source is not in the dictionary, create a new key and add the audio
                 source_tracks[source_name] = audio
-                
+
+    # === Saving the stems as flac===
     for key, i in source_tracks.items():
         torchaudio.save(
             os.path.join(output_path, f'{key}.flac'),
             i.unsqueeze(0),
             sample_rate
         )
+
+    # === Saving the mix as flac ===
+    audio, sr_mix = torchaudio.load(audio_path)
+    audio = F.resample(audio.squeeze(0), sr_mix, sample_rate)
+    duration = len(audio) / sample_rate
+    torchaudio.save(os.path.join(output_path, 'waveform.flac'),
+                    audio.unsqueeze(0),
+                    sample_rate)
+    
+    # TODO: create another option for remixing from the given stems
         
         
         
@@ -134,7 +137,7 @@ DRUMS_PLUGIN_NAMES = [
 
 def process_midi(piecename, metadata, split, path_dataset_split, workspace):
 
-    output_dir = os.path.join(workspace, 'packed_pkl', split)
+    output_dir = os.path.join(workspace, 'annotations', split)
     os.makedirs(output_dir, exist_ok=True)
 
     path_midi = os.path.join(path_dataset_split, piecename, "MIDI")
