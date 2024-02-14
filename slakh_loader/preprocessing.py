@@ -39,6 +39,8 @@ def pack_audio_clips_multithread(
     input_dir: str,
     output_dir: str,
     sample_rate: int,
+    stems: list=['Piano', 'Bass', 'Guitar'],
+    remix: bool=True,
     num_workers=-1
     ):
     """
@@ -46,6 +48,8 @@ def pack_audio_clips_multithread(
     input_dir: location of Slack2100 dataset
     output_dir: location of the output packed audio
     sample_rate: the sample rate of the output audio
+    stems: the stems to be packed. Default is ['Piano', 'Bass', 'Guitar']
+    remix: if True, remix the audio from the given stems. Default is False
     Returns:
         None
     """
@@ -66,16 +70,16 @@ def pack_audio_clips_multithread(
             output_path = os.path.join(split_output_dir, audio_name)
             os.makedirs(output_path, exist_ok=True)
 
-            param = (audio_path, output_path, audio_name, split, sample_rate)
+            param = (audio_path, output_path, stems, remix, sample_rate)
         
-            # # uncomment this for debugging
+            ## uncomment this for debugging
             # write_audio(*param)
             r = pool.apply_async(write_audio, args=param, callback=lambda x: pbar.update())
     pool.close() # stop mp when all jobs are done
     pool.join() # wait for all ljobs to be finished
 
 
-def write_audio(audio_path, output_path, audio_name, split, sample_rate):
+def write_audio(audio_path, output_path, stems, remix, sample_rate):
     r"""Write a single audio file into an hdf5 file.
     Args:
         param: (audio_index, audio_path, output_path, audio_name, split, sample_rate)
@@ -95,14 +99,15 @@ def write_audio(audio_path, output_path, audio_name, split, sample_rate):
             source_name = idx2instrument_class[item['program_num']] # mapping program_num based on MIDI_program_map.tsv
             # TODO: allow a few more mapping options (MIDI class, program_num, custom.)
             # load the stem and resample
-            audio, sr_stem = torchaudio.load(os.path.join(dirname, 'stems', f"{source_key}.flac"))
-            audio = F.resample(audio.squeeze(0), sr_stem, sample_rate)
-            if source_name in source_tracks.keys():
-                # if the source is already in the dictionary, add the audio to the existing audio
-                source_tracks[source_name] += audio
-            else:
-                # if the source is not in the dictionary, create a new key and add the audio
-                source_tracks[source_name] = audio
+            if source_name in stems: # only load the desired stems
+                audio, sr_stem = torchaudio.load(os.path.join(dirname, 'stems', f"{source_key}.flac"))
+                audio = F.resample(audio.squeeze(0), sr_stem, sample_rate)
+                if source_name in source_tracks.keys():
+                    # if the source is already in the dictionary, add the audio to the existing audio
+                    source_tracks[source_name] += audio
+                else:
+                    # if the source is not in the dictionary, create a new key and add the audio
+                    source_tracks[source_name] = audio
 
     # === Saving the stems as flac===
     for key, i in source_tracks.items():
@@ -113,12 +118,22 @@ def write_audio(audio_path, output_path, audio_name, split, sample_rate):
         )
 
     # === Saving the mix as flac ===
-    audio, sr_mix = torchaudio.load(audio_path)
-    audio = F.resample(audio.squeeze(0), sr_mix, sample_rate)
-    duration = len(audio) / sample_rate
-    torchaudio.save(os.path.join(output_path, 'waveform.flac'),
-                    audio.unsqueeze(0),
-                    sample_rate)
+    if remix:
+        # remix the audio from the given stems
+        mix_audio = 0
+        for key, i in source_tracks.items():
+            mix_audio += i
+        torchaudio.save(os.path.join(output_path, 'waveform.flac'),
+                mix_audio.unsqueeze(0),
+                sample_rate)
+    else:
+        # simply load the mix audio and resample
+        audio, sr_mix = torchaudio.load(audio_path)
+        audio = F.resample(audio.squeeze(0), sr_mix, sample_rate)
+        duration = len(audio) / sample_rate
+        torchaudio.save(os.path.join(output_path, 'waveform.flac'),
+                        audio.unsqueeze(0),
+                        sample_rate)
     
     # TODO: create another option for remixing from the given stems
         
