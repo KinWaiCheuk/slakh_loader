@@ -35,20 +35,25 @@ Assume that you have the dataset folder inside this repo, if you want to make us
 
 ```python
 from slakh_loader.preprocessing import pack_audio_clips_multithread 
-pack_audio_clips_multithread(input_dir = './slakh2100_flac_redux/',
-                 output_dir = 'waveforms',
-                 sample_rate = 16000,
-                 num_workers = -1
-                )
+pack_audio_clips_multithread(
+    input_dir = './slakh2100/',
+    output_dir = 'waveforms',
+    sample_rate = 16000,
+    num_workers = -1,
+    stems = ['Piano', 'Bass', 'Guitar'],
+    remix = True,
+    )
 ```
 
 
 If you want to preprocess the train set of midi files:
 ```python
 from slakh_loader.preprocessing import create_notes_multithread
-create_notes_multithread(path_dataset = './slakh2100_flac_redux/', 
-             workspace = './', 
-             num_workers = -1)
+create_notes_multithread(
+    path_dataset = './slakh2100/', 
+    workspace = './', 
+    stems = ['Piano', 'Bass', 'Guitar'],
+    num_workers = -1)
 ```
 
 By default, each `SXX.flac` and `SXX.mid` corresponds to one Komplete 12 plugin/patch defined in this [json file](https://github.com/ethman/slakh-generation/blob/e6454eb57a3683b99cdd16695fe652f83b75bb14/instr_defs_metadata/komplete_strict.json). We map these plugins/patches into MIDI instruments based on our custom [MIDI map](./slakh_loader/MIDI_program_map.tsv). Based on this custom map, all `SXX.mid` for each track become one `TrackXXXXX.pkl` file under the `instruments_classification_notes_MIDI_class` folder; all `SXX.flac` for each track are remapped to:
@@ -86,8 +91,8 @@ from slakh_loader.MIDI_program_map import (
                                       
 dataset = Slakh2100(
           split= 'train',
-          waveform_dir='./packed_waveforms',
-          pkl_dir='./packed_pkl',
+          waveform_dir='./waveforms',
+          pkl_dir='./annotations',
           segment_seconds=11,
           frames_per_second = 100,
           transcription = True,

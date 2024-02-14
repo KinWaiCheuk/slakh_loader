@@ -150,8 +150,7 @@ DRUMS_PLUGIN_NAMES = [
     'street_knowledge_kit',
 ]
 
-def process_midi(piecename, metadata, split, path_dataset_split, workspace):
-
+def process_midi(piecename, metadata, split, path_dataset_split, workspace, stems):
     output_dir = os.path.join(workspace, 'annotations', split)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -163,73 +162,73 @@ def process_midi(piecename, metadata, split, path_dataset_split, workspace):
     note_event_list = []    
     for trackname in tracknames:
         # E.g., "S00".
-
         plugin_name = metadata["stems"][trackname]["plugin_name"]
         program_num = metadata["stems"][trackname]["program_num"]
 
+        source_name = idx2instrument_class[program_num] # mapping program_num based on MIDI_program_map.tsv
+        if source_name in stems: # only process the desired stems
+            plugin_name = os.path.splitext(os.path.basename(plugin_name))[0]
+            # E.g., 'elektrik_guitar'.
 
-        plugin_name = os.path.splitext(os.path.basename(plugin_name))[0]
-        # E.g., 'elektrik_guitar'.
+            # Read MIDI file of a track
+            # placeholder for the processed MIDI
+            filename_midi = os.path.join(path_dataset_split, piecename, "MIDI", trackname + ".mid")        
+            midi_data = pretty_midi.PrettyMIDI(filename_midi)
 
-        # Read MIDI file of a track
-        # placeholder for the processed MIDI
-        filename_midi = os.path.join(path_dataset_split, piecename, "MIDI", trackname + ".mid")        
-        midi_data = pretty_midi.PrettyMIDI(filename_midi)
+            if len(midi_data.instruments) > 1:
+                raise Exception("multi-track midi")
 
-        if len(midi_data.instruments) > 1:
-            raise Exception("multi-track midi")
+            instr = midi_data.instruments[0]
 
-        instr = midi_data.instruments[0]
+            # Append all notes of a track to output_list if not drums.
+            if plugin_name not in DRUMS_PLUGIN_NAMES:
+                # instrument_set.add(program_num)
 
-        # Append all notes of a track to output_list if not drums.
-        if plugin_name not in DRUMS_PLUGIN_NAMES:
-            # instrument_set.add(program_num)
+                for note in instr.notes:
 
-            for note in instr.notes:
+                    # Lower an octave for bass.
+                    if instr.program in range(32, 40):
+                        pitch = note.pitch - 12
+                    else:
+                        pitch = note.pitch
 
-                # Lower an octave for bass.
-                if instr.program in range(32, 40):
-                    pitch = note.pitch - 12
-                else:
-                    pitch = note.pitch
-
-                note_event = {
-                    'split': split,
-                    'audio_name': piecename,
-                    'plugin_name': idx2instrument_class[program_num],
-                    'plugin_names': [idx2instrument_class[program_num]],
-                    'start': note.start,
-                    'end': note.end,
-                    'pitch': pitch,
-                    'velocity': note.velocity,
-                }
-
-                # Remove notes with MIDI pitches larger than 109 (very few).
-                if note.pitch < 109:
-                    # output_list.append(note_event)
-                    note_event_list.append(note_event)
-        else:
-            # instrument_set.add(program_num)
-            for note in instr.notes:
-                # Parse only valid drum pitch. MIDI note 35-81
-                # But in FL studio, it supports 24-84?
-                # Better make the range a bit larger
-                if note.pitch>=24 and note.pitch<=90:
                     note_event = {
                         'split': split,
                         'audio_name': piecename,
-                        'plugin_name': 'Drums',
-                        'plugin_names': ['Drums'],
+                        'plugin_name': source_name,
+                        'plugin_names': [source_name],
                         'start': note.start,
                         'end': note.end,
-                        'pitch': note.pitch,
+                        'pitch': pitch,
                         'velocity': note.velocity,
                     }
 
-                # Remove notes with MIDI pitches larger than 109 (very few).
-                if note.pitch < 109:
-                    # output_list.append(note_event)
-                    note_event_list.append(note_event)                
+                    # Remove notes with MIDI pitches larger than 109 (very few).
+                    if note.pitch < 109:
+                        # output_list.append(note_event)
+                        note_event_list.append(note_event)
+            else:
+                # instrument_set.add(program_num)
+                for note in instr.notes:
+                    # Parse only valid drum pitch. MIDI note 35-81
+                    # But in FL studio, it supports 24-84?
+                    # Better make the range a bit larger
+                    if note.pitch>=24 and note.pitch<=90:
+                        note_event = {
+                            'split': split,
+                            'audio_name': piecename,
+                            'plugin_name': 'Drums',
+                            'plugin_names': ['Drums'],
+                            'start': note.start,
+                            'end': note.end,
+                            'pitch': note.pitch,
+                            'velocity': note.velocity,
+                        }
+
+                    # Remove notes with MIDI pitches larger than 109 (very few).
+                    if note.pitch < 109:
+                        # output_list.append(note_event)
+                        note_event_list.append(note_event)                
 
 
 
@@ -254,6 +253,7 @@ def process_midi(piecename, metadata, split, path_dataset_split, workspace):
 
 def create_notes_multithread(path_dataset,
                  workspace,
+                 stems:list=['Piano', 'Bass', 'Guitar'],
                  num_workers=-1
                             ):   
     r"""Create list of notes information for instrument classification.
@@ -291,7 +291,7 @@ def create_notes_multithread(path_dataset,
                 except yaml.YAMLError as exc:
                     print(exc)
 
-            param = (piecename, metadata, split, path_dataset_split, workspace)
+            param = (piecename, metadata, split, path_dataset_split, workspace, stems)
             # without the lambda function, this error occurs
             # TypeError: 'bool' object is not callable
             r = pool.apply_async(process_midi, args=param, callback=lambda x: pbar.update())
